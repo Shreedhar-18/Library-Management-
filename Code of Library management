@@ -1,0 +1,224 @@
+import mysql.connector
+from datetime import datetime
+
+def connect_db():
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="Root",   # apna password daalo yahan
+        database="lib_project"
+    )
+
+def add_book(cursor, conn):
+    try:
+        book_id = int(input("Enter Book ID: "))
+        title = input("Enter Book Title: ")
+        author = input("Enter Author Name: ")
+        quantity = int(input("Enter Quantity: "))
+        query = "INSERT INTO books (book_id, title, author, quantity) VALUES (%s, %s, %s, %s)"
+        cursor.execute(query, (book_id, title, author, quantity))
+        conn.commit()
+        print("Book added successfully!\n")
+    except Exception as e:
+        print("Error adding book:", e, "\n")
+
+def view_books(cursor):
+    cursor.execute("SELECT * FROM books")
+    books = cursor.fetchall()
+    if books:
+        print("\nBooks List:")
+        print("-"*50)
+        print(f"{'ID':<5} {'Title':<20} {'Author':<15} {'Qty':<5}")
+        print("-"*50)
+        for b in books:
+            print(f"{b[0]:<5} {b[1]:<20} {b[2]:<15} {b[3]:<5}")
+        print("-"*50, "\n")
+    else:
+        print("No books found.\n")
+
+def update_book_quantity(cursor, conn):
+    try:
+        book_id = int(input("Enter Book ID to update quantity: "))
+        quantity = int(input("Enter new Quantity: "))
+        query = "UPDATE books SET quantity = %s WHERE book_id = %s"
+        cursor.execute(query, (quantity, book_id))
+        conn.commit()
+        if cursor.rowcount > 0:
+            print("Book quantity updated successfully!\n")
+        else:
+            print("Book ID not found.\n")
+    except Exception as e:
+        print("Error updating quantity:", e, "\n")
+
+def delete_book(cursor, conn):
+    try:
+        book_id = int(input("Enter Book ID to delete: "))
+        query = "DELETE FROM books WHERE book_id = %s"
+        cursor.execute(query, (book_id,))
+        conn.commit()
+        if cursor.rowcount > 0:
+            print("Book deleted successfully!\n")
+        else:
+            print("Book ID not found.\n")
+    except Exception as e:
+        print("Error deleting book:", e, "\n")
+
+def add_student(cursor, conn):
+    try:
+        student_id = int(input("Enter Student ID: "))
+        name = input("Enter Student Name: ")
+        course = input("Enter Course: ")
+        query = "INSERT INTO students (student_id, name, course) VALUES (%s, %s, %s)"
+        cursor.execute(query, (student_id, name, course))
+        conn.commit()
+        print("Student added successfully!\n")
+    except Exception as e:
+        print("Error adding student:", e, "\n")
+
+def view_students(cursor):
+    cursor.execute("SELECT * FROM students")
+    students = cursor.fetchall()
+    if students:
+        print("\nStudents List:")
+        print("-"*50)
+        print(f"{'ID':<5} {'Name':<25} {'Course':<15}")
+        print("-"*50)
+        for s in students:
+            print(f"{s[0]:<5} {s[1]:<25} {s[2]:<15}")
+        print("-"*50, "\n")
+    else:
+        print("No students found.\n")
+
+def issue_book(cursor, conn):
+    try:
+        student_id = int(input("Enter Student ID: "))
+        book_id = int(input("Enter Book ID to issue: "))
+
+        # Check if book quantity is available
+        cursor.execute("SELECT quantity FROM books WHERE book_id = %s", (book_id,))
+        result = cursor.fetchone()
+        if not result:
+            print("Book not found.\n")
+            return
+        if result[0] < 1:
+            print("Book not available currently.\n")
+            return
+
+        # Check if student exists
+        cursor.execute("SELECT * FROM students WHERE student_id = %s", (student_id,))
+        if not cursor.fetchone():
+            print("Student not found.\n")
+            return
+
+        # Issue book
+        issue_date = datetime.now().date()
+        query = "INSERT INTO issued_books (student_id, book_id, issue_date, return_date) VALUES (%s, %s, %s, NULL)"
+        cursor.execute(query, (student_id, book_id, issue_date))
+        conn.commit()
+
+        # Decrement book quantity
+        cursor.execute("UPDATE books SET quantity = quantity - 1 WHERE book_id = %s", (book_id,))
+        conn.commit()
+
+        print(f"Book ID {book_id} issued to Student ID {student_id} on {issue_date}\n")
+    except Exception as e:
+        print("Error issuing book:", e, "\n")
+
+def return_book(cursor, conn):
+    try:
+        student_id = int(input("Enter Student ID: "))
+        book_id = int(input("Enter Book ID to return: "))
+
+        # Check if issued record exists
+        cursor.execute("""
+            SELECT issue_id FROM issued_books 
+            WHERE student_id = %s AND book_id = %s AND return_date IS NULL
+        """, (student_id, book_id))
+        result = cursor.fetchone()
+        if not result:
+            print("No record found for this book issued to this student or already returned.\n")
+            return
+
+        issue_id = result[0]
+        return_date = datetime.now().date()
+
+        # Update return_date
+        cursor.execute("UPDATE issued_books SET return_date = %s WHERE issue_id = %s", (return_date, issue_id))
+        conn.commit()
+
+        # Increment book quantity
+        cursor.execute("UPDATE books SET quantity = quantity + 1 WHERE book_id = %s", (book_id,))
+        conn.commit()
+
+        print(f"Book ID {book_id} returned by Student ID {student_id} on {return_date}\n")
+    except Exception as e:
+        print("Error returning book:", e, "\n")
+
+def view_issued_books(cursor):
+    cursor.execute("""
+        SELECT i.issue_id, s.name, b.title, i.issue_date, i.return_date
+        FROM issued_books i
+        JOIN students s ON i.student_id = s.student_id
+        JOIN books b ON i.book_id = b.book_id
+        ORDER BY i.issue_date DESC
+    """)
+    issued = cursor.fetchall()
+    if issued:
+        print("\nIssued Books List:")
+        print("-"*80)
+        print(f"{'IssueID':<8} {'Student Name':<20} {'Book Title':<25} {'Issue Date':<12} {'Return Date':<12}")
+        print("-"*80)
+        for i in issued:
+            return_date = i[4] if i[4] else "Not Returned"
+            print(f"{i[0]:<8} {i[1]:<20} {i[2]:<25} {i[3]} {return_date}")
+        print("-"*80, "\n")
+    else:
+        print("No books issued yet.\n")
+
+def main():
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    while True:
+        print("========== Library Management System ==========")
+        print("1. Add Book")
+        print("2. View Books")
+        print("3. Update Book Quantity")
+        print("4. Delete Book")
+        print("5. Add Student")
+        print("6. View Students")
+        print("7. Issue Book")
+        print("8. Return Book")
+        print("9. View Issued Books")
+        print("0. Exit")
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            add_book(cursor, conn)
+        elif choice == '2':
+            view_books(cursor)
+        elif choice == '3':
+            update_book_quantity(cursor, conn)
+        elif choice == '4':
+            delete_book(cursor, conn)
+        elif choice == '5':
+            add_student(cursor, conn)
+        elif choice == '6':
+            view_students(cursor)
+        elif choice == '7':
+            issue_book(cursor, conn)
+        elif choice == '8':
+            return_book(cursor, conn)
+        elif choice == '9':
+            view_issued_books(cursor)
+        elif choice == '0':
+            print("Exiting... Goodbye!")
+            break
+        else:
+            print("Invalid choice, try again.\n")
+
+    cursor.close()
+    conn.close()
+
+if __name__ == "__main__":
+    main()
