@@ -1,6 +1,3 @@
-# Library-Management
-A programm that is way more intresting
-
 # 📚 Library Management System
 
 A command-line based **Library Management System** built using **Python** and **MySQL**, designed to manage books, students, and book issuing/returning functionalities efficiently.
